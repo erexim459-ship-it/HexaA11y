@@ -16,22 +16,18 @@
   },
   "content_scripts": [
     {
-      "matches": [ "<all_urls>" ],
-      "js": [ "content.js" ],
-      "css": [ "assets/css/widget.css" ],
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/*",
-        "assets/css/*",
-        "assets/js/*",
-        "assets/icons/*",
-        "widget.html"
+        "content.css"
       ],
-      "matches": [ "<all_urls>" ]
+      "matches": ["<all_urls>"]
     }
   ]
 }
