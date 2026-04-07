@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -29,9 +29,29 @@
         </div>
     </div>
 
-    <script src="https://vlibras.gov.br/app/vlibras-plugin.js"></script>
     <script>
-        new window.VLibras.Widget("https://vlibras.gov.br/app");
+        function carregarVLibras() {
+            const script = document.createElement("script");
+            script.src = "https://vlibras.gov.br/app/vlibras-plugin.js";
+            script.async = true;
+
+            script.onload = function () {
+                if (window.VLibras) {
+                    new window.VLibras.Widget("https://vlibras.gov.br/app");
+                    console.log("VLibras carregado com sucesso.");
+                } else {
+                    console.error("VLibras não foi disponibilizado na janela.");
+                }
+            };
+
+            script.onerror = function () {
+                console.error("Falha ao carregar o script do VLibras.");
+            };
+
+            document.body.appendChild(script);
+        }
+
+        window.addEventListener("load", carregarVLibras);
     </script>
 </body>
 </html>
