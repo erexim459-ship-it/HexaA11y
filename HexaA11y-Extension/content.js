@@ -1,979 +1,413 @@
-(function () {
-    "use strict";
+(() => {
+    if (window.hexaA11yLoaded) return;
+    window.hexaA11yLoaded = true;
 
-    const CONFIG = {
-        ttsEndpoint: (window.HexaA11yConfig && window.HexaA11yConfig.ttsEndpoint) || "/api/tts",
-        ttsEnabled: true,
-        maxTextLength: 5000,
-        maxBrowserFallbackLength: 5000,
-        buttonSize: 64,
-        widgetGap: 14,
-        screenMargin: 12,
+    let voices = [];
+    let selectedVoiceName = localStorage.getItem("hexa_voice") || "";
+    let selectedVoiceMode = localStorage.getItem("hexa_voice_mode") || "auto";
+    let fontSizeOffset = Number(localStorage.getItem("hexa_font_offset") || "0");
 
-        defaultFontPercent: 100,
-        minFontPercent: 80,
-        maxFontPercent: 140,
-        fontStep: 10,
+    function applySavedFontSize() {
+        const base = 16;
+        const finalSize = Math.max(10, Math.min(28, base + fontSizeOffset));
+        document.documentElement.style.fontSize = `${finalSize}px`;
+    }
 
-        defaultWidgetWidth: 340,
-        defaultWidgetHeight: 560,
-        minWidgetWidth: 300,
-        minWidgetHeight: 320,
+    function loadVoices() {
+        if (!("speechSynthesis" in window)) return;
 
-        designWidth: 340,
-        designHeight: 560,
-        minScale: 0.82,
-        maxScale: 1.7,
+        voices = window.speechSynthesis.getVoices() || [];
+        const select = document.getElementById("hexaVoiceSelect");
+        if (!select) return;
 
-        resizeHandleSize: 28,
-        touchResizeHandleSize: 38,
+        select.innerHTML = `<option value="">Automática do navegador</option>`;
 
-        storageKeys: {
-            mode: "hexa_voice_mode",
-            browserVoice: "hexa_browser_voice",
-            buttonLeft: "hexa_button_left",
-            buttonTop: "hexa_button_top",
-            widgetWidth: "hexa_widget_width",
-            widgetHeight: "hexa_widget_height"
+        const preferred = voices.filter(v =>
+            (v.lang || "").toLowerCase().includes("pt")
+        );
+
+        const list = preferred.length ? preferred : voices;
+
+        list.forEach(voice => {
+            const option = document.createElement("option");
+            option.value = voice.name;
+            option.textContent = `${voice.name} (${voice.lang})`;
+            if (voice.name === selectedVoiceName) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    }
+
+    function getSelectedVoice() {
+        if (!selectedVoiceName) return null;
+        return voices.find(v => v.name === selectedVoiceName) || null;
+    }
+
+    function getReadablePageText() {
+        if (!document.body) return "";
+
+        const blockedTags = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "IFRAME", "SVG"]);
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+            acceptNode(node) {
+                const parent = node.parentElement;
+                if (!parent) return NodeFilter.FILTER_REJECT;
+                if (blockedTags.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
+
+                const text = (node.nodeValue || "").trim();
+                if (!text) return NodeFilter.FILTER_REJECT;
+
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        });
+
+        const parts = [];
+        while (walker.nextNode()) {
+            const text = walker.currentNode.nodeValue.trim();
+            if (text) parts.push(text);
         }
-    };
 
-    let contrasteAtivo = false;
-    let fonteAtual = CONFIG.defaultFontPercent;
-    let lendoAgora = false;
+        return parts.join(" ").replace(/\s+/g, " ").slice(0, 5000);
+    }
 
-    let arrastandoBotao = false;
-    let moveuBotao = false;
-    let ponteiroBotaoAtual = null;
-    let offsetX = 0;
-    let offsetY = 0;
+    function updateAvatarSpeaking(isSpeaking) {
+        const avatar = document.querySelector(".hexa-avatar");
+        if (!avatar) return;
 
-    let redimensionandoWidget = false;
-    let ponteiroResizeAtual = null;
-    let resizeStartX = 0;
-    let resizeStartY = 0;
-    let resizeStartWidth = 0;
-    let resizeStartHeight = 0;
+        if (isSpeaking) {
+            avatar.classList.add("speaking");
+        } else {
+            avatar.classList.remove("speaking");
+        }
+    }
 
-    let vozesDisponiveis = [];
-    let vozSelecionada = null;
-    let filaFalas = [];
-    let indiceFalaAtual = 0;
-    let audioAtual = null;
-    let abortControllerTts = null;
+    function speakPage() {
+        if (!("speechSynthesis" in window)) {
+            setStatus("Leitura por voz não suportada neste navegador.");
+            return;
+        }
 
-    let modoVoz = localStorage.getItem(CONFIG.storageKeys.mode) || "auto";
-    let nomeVozSalva = localStorage.getItem(CONFIG.storageKeys.browserVoice) || "";
+        const text = getReadablePageText();
+        if (!text) {
+            setStatus("Não encontrei texto suficiente para leitura.");
+            return;
+        }
 
-    const botao = document.createElement("button");
-    botao.className = "hexa-btn";
-    botao.setAttribute("aria-label", "Abrir acessibilidade");
-    botao.setAttribute("type", "button");
-    botao.innerHTML = "♿";
+        stopSpeech();
 
-    const widget = document.createElement("section");
-    widget.className = "hexa-widget";
-    widget.setAttribute("aria-label", "Painel de acessibilidade");
-    widget.innerHTML = `
-        <div class="hexa-header">
-            <div class="hexa-avatar-wrap">
-                <div class="hexa-avatar-glow"></div>
-                <div class="hexa-avatar" id="hexaAvatar">
-                    <div class="hexa-face">
-                        <span class="hexa-eye left"></span>
-                        <span class="hexa-eye right"></span>
-                        <span class="hexa-mouth"></span>
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "pt-BR";
+        utterance.rate = selectedVoiceMode === "slow" ? 0.9 : 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        const selected = getSelectedVoice();
+        if (selected) utterance.voice = selected;
+
+        utterance.onstart = () => {
+            updateAvatarSpeaking(true);
+            setStatus("Lendo o conteúdo da página...");
+        };
+
+        utterance.onend = () => {
+            updateAvatarSpeaking(false);
+            setStatus("Leitura finalizada.");
+        };
+
+        utterance.onerror = () => {
+            updateAvatarSpeaking(false);
+            setStatus("Falha ao reproduzir a leitura.");
+        };
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function stopSpeech() {
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.cancel();
+        }
+        updateAvatarSpeaking(false);
+        setStatus("Leitura interrompida.");
+    }
+
+    function increaseFont() {
+        fontSizeOffset = Math.min(fontSizeOffset + 1, 12);
+        localStorage.setItem("hexa_font_offset", String(fontSizeOffset));
+        applySavedFontSize();
+        setStatus("Fonte aumentada.");
+    }
+
+    function decreaseFont() {
+        fontSizeOffset = Math.max(fontSizeOffset - 1, -6);
+        localStorage.setItem("hexa_font_offset", String(fontSizeOffset));
+        applySavedFontSize();
+        setStatus("Fonte diminuída.");
+    }
+
+    function toggleContrast() {
+        document.documentElement.classList.toggle("hexa-high-contrast");
+        const enabled = document.documentElement.classList.contains("hexa-high-contrast");
+        setStatus(enabled ? "Alto contraste ativado." : "Alto contraste desativado.");
+    }
+
+    function setStatus(message) {
+        const status = document.getElementById("hexaStatusText");
+        if (status) status.textContent = message;
+    }
+
+    function togglePanel(forceOpen = null) {
+        const widget = document.getElementById("hexaWidget");
+        if (!widget) return;
+
+        const isHidden = widget.classList.contains("hexa-hidden");
+        const shouldOpen = forceOpen === null ? isHidden : forceOpen;
+
+        widget.classList.toggle("hexa-hidden", !shouldOpen);
+    }
+
+    function createWidget() {
+        if (document.getElementById("hexaA11yRoot")) return;
+
+        const root = document.createElement("div");
+        root.id = "hexaA11yRoot";
+
+        root.innerHTML = `
+            <button id="hexaFloatingButton" class="hexa-floating-btn" aria-label="Abrir acessibilidade" title="Acessibilidade">
+                ♿
+            </button>
+
+            <div id="hexaWidget" class="hexa-widget hexa-hidden">
+                <div class="hexa-header">
+                    <div class="hexa-avatar-wrap">
+                        <div class="hexa-avatar-glow"></div>
+                        <div class="hexa-avatar">
+                            <div class="hexa-face">
+                                <span class="hexa-eye left"></span>
+                                <span class="hexa-eye right"></span>
+                                <span class="hexa-mouth"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="hexa-title">
+                        <h3>HexaA11y</h3>
+                        <p>Assistente visual de acessibilidade</p>
+                    </div>
+
+                    <button id="hexaCloseButton" class="hexa-close-btn" aria-label="Fechar painel" title="Fechar painel">×</button>
+                </div>
+
+                <div class="hexa-content">
+                    <div class="hexa-side-text">
+                        <p id="hexaStatusText">Olá. Posso ajudar com leitura da página, contraste e ampliação visual.</p>
+                    </div>
+
+                    <div class="hexa-actions-panel">
+                        <div class="hexa-group">
+                            <label class="hexa-label" for="hexaVoiceMode">Modo de voz</label>
+                            <select id="hexaVoiceMode" class="hexa-select">
+                                <option value="auto">Automática</option>
+                                <option value="slow">Mais suave</option>
+                            </select>
+                        </div>
+
+                        <div class="hexa-group">
+                            <label class="hexa-label" for="hexaVoiceSelect">Voz do navegador</label>
+                            <select id="hexaVoiceSelect" class="hexa-select"></select>
+                        </div>
+
+                        <button class="hexa-action-btn" id="hexaReadButton">🔊 Ler página</button>
+                        <button class="hexa-action-btn" id="hexaStopButton">⏹ Parar leitura</button>
+                        <button class="hexa-action-btn" id="hexaIncreaseButton">🔎 Aumentar fonte</button>
+                        <button class="hexa-action-btn" id="hexaDecreaseButton">🔽 Diminuir fonte</button>
+                        <button class="hexa-action-btn" id="hexaContrastButton">🌙 Alto contraste</button>
                     </div>
                 </div>
+
+                <button class="hexa-resize-handle" id="hexaResizeHandle" aria-label="Redimensionar"></button>
             </div>
 
-            <div class="hexa-title">
-                <h3>HexaA11y</h3>
-                <p>Assistente visual de acessibilidade</p>
-            </div>
-        </div>
+            <button id="hexaVlibrasButton" class="hexa-vlibras-btn" aria-label="Abrir VLibras" title="VLibras">
+                🤟
+            </button>
+        `;
 
-        <div class="hexa-body">
-            <div class="hexa-status" id="hexaStatus">
-                Olá. Posso ajudar com leitura da página, contraste e ampliação visual.
-            </div>
+        document.body.appendChild(root);
 
-            <div class="hexa-actions">
-                <div class="hexa-voice-config">
-                    <label class="hexa-label" for="hexaVoiceMode">Modo de voz</label>
-                    <select class="hexa-select" id="hexaVoiceMode">
-                        <option value="auto">Automática</option>
-                        <option value="neural">Neural</option>
-                        <option value="browser">Navegador</option>
-                    </select>
-                </div>
+        const floatingButton = document.getElementById("hexaFloatingButton");
+        const closeButton = document.getElementById("hexaCloseButton");
+        const voiceSelect = document.getElementById("hexaVoiceSelect");
+        const voiceMode = document.getElementById("hexaVoiceMode");
+        const vlibrasButton = document.getElementById("hexaVlibrasButton");
 
-                <div class="hexa-voice-config">
-                    <label class="hexa-label" for="hexaBrowserVoice">Voz do navegador</label>
-                    <select class="hexa-select" id="hexaBrowserVoice">
-                        <option value="">Carregando vozes...</option>
-                    </select>
-                </div>
+        floatingButton.addEventListener("click", () => togglePanel());
+        closeButton.addEventListener("click", () => togglePanel(false));
 
-                <button class="hexa-action" id="hexaLerPagina">🔊 Ler página</button>
-                <button class="hexa-action" id="hexaPararLeitura">⏹️ Parar leitura</button>
-                <button class="hexa-action" id="hexaAumentarFonte">🔎 Aumentar fonte</button>
-                <button class="hexa-action" id="hexaDiminuirFonte">🔽 Diminuir fonte</button>
-                <button class="hexa-action" id="hexaContraste">🌙 Alto contraste</button>
-            </div>
-        </div>
+        document.getElementById("hexaReadButton").addEventListener("click", speakPage);
+        document.getElementById("hexaStopButton").addEventListener("click", stopSpeech);
+        document.getElementById("hexaIncreaseButton").addEventListener("click", increaseFont);
+        document.getElementById("hexaDecreaseButton").addEventListener("click", decreaseFont);
+        document.getElementById("hexaContrastButton").addEventListener("click", toggleContrast);
 
-        <button class="hexa-resize-handle" type="button" aria-label="Redimensionar painel"></button>
-    `;
-
-    document.body.appendChild(botao);
-    document.body.appendChild(widget);
-
-    const avatar = document.getElementById("hexaAvatar");
-    const status = document.getElementById("hexaStatus");
-    const btnLerPagina = document.getElementById("hexaLerPagina");
-    const btnPararLeitura = document.getElementById("hexaPararLeitura");
-    const btnAumentarFonte = document.getElementById("hexaAumentarFonte");
-    const btnDiminuirFonte = document.getElementById("hexaDiminuirFonte");
-    const btnContraste = document.getElementById("hexaContraste");
-    const selectVoiceMode = document.getElementById("hexaVoiceMode");
-    const selectBrowserVoice = document.getElementById("hexaBrowserVoice");
-    const resizeHandle = widget.querySelector(".hexa-resize-handle");
-
-    selectVoiceMode.value = modoVoz;
-
-    function atualizarStatus(texto) {
-        status.textContent = texto;
-    }
-
-    function iniciarAnimacaoFala() {
-        avatar.classList.add("speaking");
-    }
-
-    function pararAnimacaoFala() {
-        avatar.classList.remove("speaking");
-    }
-
-    function clamp(valor, min, max) {
-        return Math.min(Math.max(valor, min), max);
-    }
-
-    function isTouchDevice() {
-        return window.matchMedia("(pointer: coarse)").matches;
-    }
-
-    function obterPosicaoBotao() {
-        const rect = botao.getBoundingClientRect();
-
-        return {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height
-        };
-    }
-
-    function obterLimitesWidget() {
-        const larguraMaxima = Math.max(CONFIG.minWidgetWidth, window.innerWidth - (CONFIG.screenMargin * 2));
-        const alturaMaxima = Math.max(CONFIG.minWidgetHeight, window.innerHeight - (CONFIG.screenMargin * 2));
-
-        return {
-            larguraMaxima,
-            alturaMaxima
-        };
-    }
-
-    function calcularEscalaProporcional(largura, altura) {
-        const escalaLargura = largura / CONFIG.designWidth;
-        const escalaAltura = altura / CONFIG.designHeight;
-        return clamp(Math.min(escalaLargura, escalaAltura), CONFIG.minScale, CONFIG.maxScale);
-    }
-
-    function aplicarEscalaInterna(largura, altura) {
-        const escala = calcularEscalaProporcional(largura, altura);
-        widget.style.setProperty("--hexa-scale", String(escala));
-        widget.style.setProperty("--hexa-width", `${Math.round(largura)}px`);
-        widget.style.setProperty("--hexa-height", `${Math.round(altura)}px`);
-    }
-
-    function aplicarTamanhoWidget(largura, altura) {
-        const { larguraMaxima, alturaMaxima } = obterLimitesWidget();
-
-        const larguraFinal = clamp(largura, CONFIG.minWidgetWidth, larguraMaxima);
-        const alturaFinal = clamp(altura, CONFIG.minWidgetHeight, alturaMaxima);
-
-        widget.style.width = `${larguraFinal}px`;
-        widget.style.height = `${alturaFinal}px`;
-        widget.style.maxWidth = `${larguraMaxima}px`;
-        widget.style.maxHeight = `${alturaMaxima}px`;
-
-        aplicarEscalaInterna(larguraFinal, alturaFinal);
-    }
-
-    function aplicarTamanhoSalvoWidget() {
-        const larguraSalva = Number(localStorage.getItem(CONFIG.storageKeys.widgetWidth));
-        const alturaSalva = Number(localStorage.getItem(CONFIG.storageKeys.widgetHeight));
-
-        const largura = Number.isNaN(larguraSalva) ? CONFIG.defaultWidgetWidth : larguraSalva;
-        const altura = Number.isNaN(alturaSalva) ? CONFIG.defaultWidgetHeight : alturaSalva;
-
-        aplicarTamanhoWidget(largura, altura);
-    }
-
-    function salvarTamanhoWidget() {
-        const rect = widget.getBoundingClientRect();
-
-        localStorage.setItem(CONFIG.storageKeys.widgetWidth, String(Math.round(rect.width)));
-        localStorage.setItem(CONFIG.storageKeys.widgetHeight, String(Math.round(rect.height)));
-    }
-
-    function limitarPosicaoWidgetAoViewport() {
-        const rect = widget.getBoundingClientRect();
-        let left = rect.left;
-        let top = rect.top;
-
-        const maxLeft = window.innerWidth - rect.width - CONFIG.screenMargin;
-        const maxTop = window.innerHeight - rect.height - CONFIG.screenMargin;
-
-        left = clamp(left, CONFIG.screenMargin, maxLeft);
-        top = clamp(top, CONFIG.screenMargin, maxTop);
-
-        widget.style.left = `${left}px`;
-        widget.style.top = `${top}px`;
-        widget.style.right = "auto";
-        widget.style.bottom = "auto";
-    }
-
-    function posicionarWidget() {
-        const rect = obterPosicaoBotao();
-
-        aplicarTamanhoSalvoWidget();
-
-        widget.style.left = "";
-        widget.style.right = "";
-        widget.style.top = "";
-        widget.style.bottom = "";
-        widget.style.display = "flex";
-
-        const larguraWidget = widget.offsetWidth;
-        const alturaWidget = widget.offsetHeight;
-
-        let left = rect.left - (larguraWidget - rect.width);
-        if (left < CONFIG.screenMargin) {
-            left = CONFIG.screenMargin;
-        }
-        if (left + larguraWidget > window.innerWidth - CONFIG.screenMargin) {
-            left = window.innerWidth - larguraWidget - CONFIG.screenMargin;
-        }
-
-        let top = rect.top - alturaWidget - CONFIG.widgetGap;
-        if (top < CONFIG.screenMargin) {
-            top = rect.bottom + CONFIG.widgetGap;
-        }
-        if (top + alturaWidget > window.innerHeight - CONFIG.screenMargin) {
-            top = window.innerHeight - alturaWidget - CONFIG.screenMargin;
-        }
-
-        widget.style.left = `${left}px`;
-        widget.style.top = `${top}px`;
-    }
-
-    function abrirOuFecharWidget() {
-        if (widget.style.display === "flex") {
-            widget.style.display = "none";
-            return;
-        }
-
-        posicionarWidget();
-    }
-
-    function escolherMelhorVoz(vozes) {
-        if (!vozes || !vozes.length) {
-            return null;
-        }
-
-        const prioridades = [
-            "microsoft francisca",
-            "microsoft antonio",
-            "microsoft maria",
-            "microsoft helia",
-            "microsoft luciana",
-            "luciana",
-            "francisca",
-            "google português do brasil",
-            "google portuguese",
-            "portuguese brazil",
-            "pt-br"
-        ];
-
-        const vozesPtBr = vozes.filter((voz) => {
-            const lang = (voz.lang || "").toLowerCase();
-            return lang.includes("pt-br") || lang.startsWith("pt");
+        voiceSelect.addEventListener("change", () => {
+            selectedVoiceName = voiceSelect.value;
+            localStorage.setItem("hexa_voice", selectedVoiceName);
+            setStatus("Voz do navegador atualizada.");
         });
 
-        if (!vozesPtBr.length) {
-            return vozes[0] || null;
-        }
-
-        for (const prioridade of prioridades) {
-            const encontrada = vozesPtBr.find((voz) =>
-                (voz.name || "").toLowerCase().includes(prioridade)
-            );
-
-            if (encontrada) {
-                return encontrada;
-            }
-        }
-
-        const vozLocal = vozesPtBr.find((voz) => voz.localService);
-        if (vozLocal) {
-            return vozLocal;
-        }
-
-        return vozesPtBr[0];
-    }
-
-    function preencherSelectVozes() {
-        selectBrowserVoice.innerHTML = "";
-
-        if (!vozesDisponiveis.length) {
-            const option = document.createElement("option");
-            option.value = "";
-            option.textContent = "Nenhuma voz encontrada";
-            selectBrowserVoice.appendChild(option);
-            vozSelecionada = null;
-            return;
-        }
-
-        const vozesPt = vozesDisponiveis.filter((voz) => {
-            const lang = (voz.lang || "").toLowerCase();
-            return lang.includes("pt") || lang.includes("br");
+        voiceMode.value = selectedVoiceMode;
+        voiceMode.addEventListener("change", () => {
+            selectedVoiceMode = voiceMode.value;
+            localStorage.setItem("hexa_voice_mode", selectedVoiceMode);
+            setStatus("Modo de voz atualizado.");
         });
 
-        const lista = vozesPt.length ? vozesPt : vozesDisponiveis;
-
-        lista.forEach((voz) => {
-            const option = document.createElement("option");
-            option.value = voz.name;
-            option.textContent = `${voz.name} (${voz.lang})`;
-            selectBrowserVoice.appendChild(option);
+        vlibrasButton.addEventListener("click", () => {
+            loadVLibras();
         });
 
-        let vozFinal = null;
+        loadVoices();
 
-        if (nomeVozSalva) {
-            vozFinal = lista.find((voz) => voz.name === nomeVozSalva) || null;
-        }
-
-        if (!vozFinal) {
-            vozFinal = escolherMelhorVoz(lista);
-        }
-
-        vozSelecionada = vozFinal || null;
-
-        if (vozSelecionada) {
-            selectBrowserVoice.value = vozSelecionada.name;
-            nomeVozSalva = vozSelecionada.name;
-            localStorage.setItem(CONFIG.storageKeys.browserVoice, nomeVozSalva);
-        }
-    }
-
-    function carregarVozes() {
-        vozesDisponiveis = window.speechSynthesis.getVoices() || [];
-        preencherSelectVozes();
-    }
-
-    function limparTextoParaLeitura(texto) {
-        return (texto || "")
-            .replace(/\s+/g, " ")
-            .replace(/[ ]+([,.!?;:])/g, "$1")
-            .trim();
-    }
-
-    function extrairTextoLegivel() {
-        const elementosIgnorados = [
-            "script",
-            "style",
-            "noscript",
-            "iframe",
-            "svg",
-            "canvas",
-            "[aria-hidden='true']",
-            ".hexa-widget",
-            ".hexa-btn",
-            "[vw]",
-            "[vw-access-button]",
-            ".vw-plugin-wrapper",
-            ".vw-window"
-        ];
-
-        const encontrados = document.querySelectorAll(elementosIgnorados.join(", "));
-        const removidos = [];
-
-        encontrados.forEach((elemento) => {
-            removidos.push({
-                elemento,
-                parent: elemento.parentNode,
-                nextSibling: elemento.nextSibling
-            });
-
-            if (elemento.parentNode) {
-                elemento.parentNode.removeChild(elemento);
-            }
-        });
-
-        let texto = "";
-
-        try {
-            texto = document.body ? document.body.innerText : "";
-        } finally {
-            removidos.forEach((item) => {
-                if (!item.parent) return;
-
-                if (item.nextSibling && item.nextSibling.parentNode === item.parent) {
-                    item.parent.insertBefore(item.elemento, item.nextSibling);
-                } else {
-                    item.parent.appendChild(item.elemento);
-                }
-            });
-        }
-
-        return limparTextoParaLeitura(texto).slice(0, CONFIG.maxTextLength);
-    }
-
-    function quebrarTextoEmBlocos(texto, tamanhoMaximo = 220) {
-        const frases = texto.match(/[^.!?]+[.!?]?/g) || [texto];
-        const blocos = [];
-        let atual = "";
-
-        for (const fraseBruta of frases) {
-            const frase = fraseBruta.trim();
-            if (!frase) continue;
-
-            if ((atual + " " + frase).trim().length <= tamanhoMaximo) {
-                atual = (atual + " " + frase).trim();
-            } else {
-                if (atual) {
-                    blocos.push(atual);
-                }
-                atual = frase;
-            }
-        }
-
-        if (atual) {
-            blocos.push(atual);
-        }
-
-        return blocos.length ? blocos : [texto];
-    }
-
-    function criarFala(texto) {
-        const fala = new SpeechSynthesisUtterance(texto);
-        fala.lang = (vozSelecionada && vozSelecionada.lang) || "pt-BR";
-        fala.voice = vozSelecionada || null;
-        fala.rate = 0.95;
-        fala.pitch = 1;
-        fala.volume = 1;
-        return fala;
-    }
-
-    function finalizarLeitura() {
-        lendoAgora = false;
-        pararAnimacaoFala();
-        atualizarStatus("Leitura finalizada.");
-    }
-
-    function falarProximoBlocoFallback() {
-        if (indiceFalaAtual >= filaFalas.length) {
-            finalizarLeitura();
-            return;
-        }
-
-        const bloco = filaFalas[indiceFalaAtual];
-        const fala = criarFala(bloco);
-
-        fala.onstart = () => {
-            lendoAgora = true;
-            iniciarAnimacaoFala();
-
-            const nomeVoz = vozSelecionada && vozSelecionada.name
-                ? ` com a voz ${vozSelecionada.name}`
-                : "";
-
-            atualizarStatus(`Usando voz do navegador${nomeVoz}.`);
-        };
-
-        fala.onend = () => {
-            indiceFalaAtual += 1;
-            falarProximoBlocoFallback();
-        };
-
-        fala.onerror = () => {
-            lendoAgora = false;
-            pararAnimacaoFala();
-            atualizarStatus("Não foi possível realizar a leitura neste navegador.");
-        };
-
-        window.speechSynthesis.speak(fala);
-    }
-
-    function lerComFallbackNavegador(texto) {
-        window.speechSynthesis.cancel();
-        carregarVozes();
-
-        const textoLimpo = limparTextoParaLeitura(texto).slice(0, CONFIG.maxBrowserFallbackLength);
-
-        if (!textoLimpo) {
-            atualizarStatus("Não encontrei conteúdo legível nesta página.");
-            return;
-        }
-
-        filaFalas = quebrarTextoEmBlocos(textoLimpo, 220);
-        indiceFalaAtual = 0;
-        falarProximoBlocoFallback();
-    }
-
-    async function solicitarTtsNeural(texto) {
-        if (!CONFIG.ttsEnabled) {
-            throw new Error("TTS neural desativado.");
-        }
-
-        abortControllerTts = new AbortController();
-
-        const response = await fetch(CONFIG.ttsEndpoint, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Accept": "audio/mpeg,audio/wav,audio/ogg,application/json"
-            },
-            body: JSON.stringify({
-                text: texto,
-                lang: "pt-BR"
-            }),
-            signal: abortControllerTts.signal
-        });
-
-        if (!response.ok) {
-            const erroTexto = await response.text().catch(() => "");
-            throw new Error(`Falha ao gerar TTS neural. Status ${response.status}. ${erroTexto}`);
-        }
-
-        const contentType = (response.headers.get("content-type") || "").toLowerCase();
-
-        if (contentType.startsWith("audio/")) {
-            const audioBlob = await response.blob();
-
-            if (!audioBlob || !audioBlob.size) {
-                throw new Error("Áudio vazio retornado pelo TTS neural.");
-            }
-
-            return audioBlob;
-        }
-
-        if (contentType.includes("application/json")) {
-            const data = await response.json();
-
-            if (data.audioBase64) {
-                const mimeType = data.mimeType || "audio/mpeg";
-                const byteCharacters = atob(data.audioBase64);
-                const byteNumbers = new Array(byteCharacters.length);
-
-                for (let i = 0; i < byteCharacters.length; i += 1) {
-                    byteNumbers[i] = byteCharacters.charCodeAt(i);
-                }
-
-                const byteArray = new Uint8Array(byteNumbers);
-                const audioBlob = new Blob([byteArray], { type: mimeType });
-
-                if (!audioBlob.size) {
-                    throw new Error("Áudio base64 retornado vazio.");
-                }
-
-                return audioBlob;
-            }
-
-            throw new Error(data.message || "JSON retornado sem audioBase64.");
-        }
-
-        const respostaTexto = await response.text().catch(() => "");
-        throw new Error(`Resposta inesperada do TTS neural: ${contentType || "sem content-type"}. ${respostaTexto}`);
-    }
-
-    function tocarAudioBlob(audioBlob) {
-        return new Promise((resolve, reject) => {
-            const url = URL.createObjectURL(audioBlob);
-
-            if (audioAtual) {
-                audioAtual.pause();
-                audioAtual.currentTime = 0;
-                audioAtual = null;
-            }
-
-            audioAtual = new Audio();
-            audioAtual.preload = "auto";
-            audioAtual.src = url;
-
-            let finalizado = false;
-
-            const limpar = () => {
-                if (finalizado) return;
-                finalizado = true;
-
-                if (audioAtual) {
-                    audioAtual.onplay = null;
-                    audioAtual.onended = null;
-                    audioAtual.onerror = null;
-                }
-
-                URL.revokeObjectURL(url);
+        if ("speechSynthesis" in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                loadVoices();
             };
+        }
 
-            audioAtual.onplay = () => {
-                lendoAgora = true;
-                iniciarAnimacaoFala();
-                atualizarStatus("Usando voz neural.");
-            };
-
-            audioAtual.onended = () => {
-                limpar();
-                lendoAgora = false;
-                pararAnimacaoFala();
-                atualizarStatus("Leitura finalizada.");
-                resolve();
-            };
-
-            audioAtual.onerror = () => {
-                limpar();
-                lendoAgora = false;
-                pararAnimacaoFala();
-                reject(new Error("Falha ao reproduzir o áudio gerado."));
-            };
-
-            audioAtual.play().catch((erro) => {
-                limpar();
-                lendoAgora = false;
-                pararAnimacaoFala();
-                reject(erro);
-            });
-        });
+        setupResize();
+        applySavedFontSize();
     }
 
-    async function lerPagina() {
-        pararLeituraSilenciosamente();
-
-        const texto = extrairTextoLegivel();
-
-        if (!texto) {
-            atualizarStatus("Não encontrei conteúdo legível nesta página.");
+    function loadVLibras() {
+        if (window.VLibras) {
+            setStatus("VLibras já está disponível nesta página.");
             return;
         }
 
-        if (modoVoz === "browser") {
-            atualizarStatus("Usando voz do navegador.");
-            lerComFallbackNavegador(texto);
+        if (document.getElementById("vlibras-plugin-script")) {
+            setStatus("VLibras já está sendo carregado...");
             return;
         }
 
-        if (modoVoz === "neural") {
+        setStatus("Carregando VLibras...");
+
+        const script = document.createElement("script");
+        script.id = "vlibras-plugin-script";
+        script.src = "https://vlibras.gov.br/app/vlibras-plugin.js";
+        script.async = true;
+
+        script.onload = () => {
             try {
-                atualizarStatus("Gerando voz neural...");
-                const audioBlob = await solicitarTtsNeural(texto);
-                await tocarAudioBlob(audioBlob);
-            } catch (erro) {
-                console.error("Falha no modo neural.", erro);
-                atualizarStatus("Voz neural indisponível. Usando voz do navegador.");
-                lerComFallbackNavegador(texto);
+                const vw = document.createElement("div");
+                vw.setAttribute("vw", "");
+                vw.className = "enabled";
+
+                const accessButton = document.createElement("div");
+                accessButton.setAttribute("vw-access-button", "");
+                accessButton.className = "active";
+
+                const pluginWrapper = document.createElement("div");
+                pluginWrapper.setAttribute("vw-plugin-wrapper", "");
+
+                const pluginTopWrapper = document.createElement("div");
+                pluginTopWrapper.className = "vw-plugin-top-wrapper";
+
+                pluginWrapper.appendChild(pluginTopWrapper);
+                vw.appendChild(accessButton);
+                vw.appendChild(pluginWrapper);
+                document.body.appendChild(vw);
+
+                if (window.VLibras && typeof window.VLibras.Widget === "function") {
+                    new window.VLibras.Widget("https://vlibras.gov.br/app");
+                    setStatus("VLibras carregado com sucesso.");
+                } else {
+                    setStatus("O script do VLibras carregou, mas o widget não iniciou.");
+                }
+            } catch (error) {
+                console.error(error);
+                setStatus("Falha ao iniciar o VLibras.");
             }
-            return;
-        }
+        };
 
-        try {
-            atualizarStatus("Tentando voz neural...");
-            const audioBlob = await solicitarTtsNeural(texto);
-            await tocarAudioBlob(audioBlob);
-        } catch (erro) {
-            console.error("Falha no TTS neural. Aplicando fallback.", erro);
-            atualizarStatus("TTS neural indisponível. Usando voz do navegador.");
-            lerComFallbackNavegador(texto);
-        }
+        script.onerror = () => {
+            setStatus("Este site bloqueou o carregamento do VLibras.");
+        };
+
+        document.documentElement.appendChild(script);
     }
 
-    function pararLeituraSilenciosamente() {
-        if (abortControllerTts) {
-            abortControllerTts.abort();
-            abortControllerTts = null;
-        }
+    function setupResize() {
+        const widget = document.getElementById("hexaWidget");
+        const handle = document.getElementById("hexaResizeHandle");
+        if (!widget || !handle) return;
 
-        if (audioAtual) {
-            audioAtual.pause();
-            audioAtual.currentTime = 0;
-            audioAtual = null;
-        }
+        let resizing = false;
+        let startX = 0;
+        let startY = 0;
+        let startWidth = 0;
+        let startHeight = 0;
 
-        window.speechSynthesis.cancel();
+        const move = (event) => {
+            if (!resizing) return;
 
-        lendoAgora = false;
-        filaFalas = [];
-        indiceFalaAtual = 0;
-        pararAnimacaoFala();
-    }
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
 
-    function pararLeitura() {
-        pararLeituraSilenciosamente();
-        atualizarStatus("Leitura interrompida.");
-    }
+            const nextWidth = Math.max(320, Math.min(window.innerWidth - 20, startWidth + (clientX - startX)));
+            const nextHeight = Math.max(420, Math.min(window.innerHeight - 20, startHeight + (clientY - startY)));
 
-    function aplicarFonte() {
-        document.documentElement.style.fontSize = `${fonteAtual}%`;
-    }
+            widget.style.width = `${nextWidth}px`;
+            widget.style.height = `${nextHeight}px`;
+        };
 
-    function aumentarFonte() {
-        if (fonteAtual < CONFIG.maxFontPercent) {
-            fonteAtual += CONFIG.fontStep;
-            aplicarFonte();
-            atualizarStatus(`Fonte ajustada para ${fonteAtual}%.`);
-        }
-    }
+        const end = () => {
+            resizing = false;
+            document.removeEventListener("mousemove", move);
+            document.removeEventListener("mouseup", end);
+            document.removeEventListener("touchmove", move);
+            document.removeEventListener("touchend", end);
+        };
 
-    function diminuirFonte() {
-        if (fonteAtual > CONFIG.minFontPercent) {
-            fonteAtual -= CONFIG.fontStep;
-            aplicarFonte();
-            atualizarStatus(`Fonte ajustada para ${fonteAtual}%.`);
-        }
-    }
-
-    function alternarContraste() {
-        contrasteAtivo = !contrasteAtivo;
-        document.body.classList.toggle("hexa-high-contrast", contrasteAtivo);
-
-        atualizarStatus(
-            contrasteAtivo
-                ? "Modo de alto contraste ativado."
-                : "Modo de alto contraste desativado."
-        );
-    }
-
-    function definirPosicaoBotao(left, top) {
-        const maxLeft = window.innerWidth - CONFIG.buttonSize - CONFIG.screenMargin;
-        const maxTop = window.innerHeight - CONFIG.buttonSize - CONFIG.screenMargin;
-
-        const leftFinal = clamp(left, CONFIG.screenMargin, maxLeft);
-        const topFinal = clamp(top, CONFIG.screenMargin, maxTop);
-
-        botao.style.left = `${leftFinal}px`;
-        botao.style.top = `${topFinal}px`;
-        botao.style.right = "auto";
-        botao.style.bottom = "auto";
-
-        localStorage.setItem(CONFIG.storageKeys.buttonLeft, String(leftFinal));
-        localStorage.setItem(CONFIG.storageKeys.buttonTop, String(topFinal));
-
-        if (widget.style.display === "flex" && !redimensionandoWidget) {
-            posicionarWidget();
-        }
-    }
-
-    function restaurarPosicaoBotao() {
-        const leftSalvo = Number(localStorage.getItem(CONFIG.storageKeys.buttonLeft));
-        const topSalvo = Number(localStorage.getItem(CONFIG.storageKeys.buttonTop));
-
-        if (!Number.isNaN(leftSalvo) && !Number.isNaN(topSalvo)) {
-            definirPosicaoBotao(leftSalvo, topSalvo);
-        }
-    }
-
-    function iniciarArrasteBotao(event) {
-        if (event.target === resizeHandle) return;
-
-        arrastandoBotao = true;
-        moveuBotao = false;
-        ponteiroBotaoAtual = event.pointerId;
-
-        const rect = botao.getBoundingClientRect();
-        offsetX = event.clientX - rect.left;
-        offsetY = event.clientY - rect.top;
-
-        botao.classList.add("dragging");
-        botao.setPointerCapture(event.pointerId);
-    }
-
-    function moverBotao(event) {
-        if (!arrastandoBotao || event.pointerId !== ponteiroBotaoAtual) {
-            return;
-        }
-
-        const novoLeft = event.clientX - offsetX;
-        const novoTop = event.clientY - offsetY;
-
-        definirPosicaoBotao(novoLeft, novoTop);
-        moveuBotao = true;
-    }
-
-    function finalizarArrasteBotao(event) {
-        if (event.pointerId !== ponteiroBotaoAtual) {
-            return;
-        }
-
-        arrastandoBotao = false;
-        botao.classList.remove("dragging");
-
-        try {
-            botao.releasePointerCapture(event.pointerId);
-        } catch (erro) {
-            console.warn("Não foi possível liberar o pointer capture.", erro);
-        }
-
-        setTimeout(() => {
-            moveuBotao = false;
-        }, 50);
-    }
-
-    function iniciarResizeWidget(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        redimensionandoWidget = true;
-        ponteiroResizeAtual = event.pointerId;
-        resizeStartX = event.clientX;
-        resizeStartY = event.clientY;
-
-        const rect = widget.getBoundingClientRect();
-        resizeStartWidth = rect.width;
-        resizeStartHeight = rect.height;
-
-        widget.classList.add("resizing");
-        resizeHandle.setPointerCapture(event.pointerId);
-    }
-
-    function moverResizeWidget(event) {
-        if (!redimensionandoWidget || event.pointerId !== ponteiroResizeAtual) {
-            return;
-        }
-
-        const dx = event.clientX - resizeStartX;
-        const dy = event.clientY - resizeStartY;
-
-        const novaLargura = resizeStartWidth + dx;
-        const novaAltura = resizeStartHeight + dy;
-
-        aplicarTamanhoWidget(novaLargura, novaAltura);
-        limitarPosicaoWidgetAoViewport();
-    }
-
-    function finalizarResizeWidget(event) {
-        if (event.pointerId !== ponteiroResizeAtual) {
-            return;
-        }
-
-        redimensionandoWidget = false;
-        widget.classList.remove("resizing");
-
-        try {
-            resizeHandle.releasePointerCapture(event.pointerId);
-        } catch (erro) {
-            console.warn("Não foi possível liberar o pointer capture do resize.", erro);
-        }
-
-        salvarTamanhoWidget();
-        limitarPosicaoWidgetAoViewport();
-    }
-
-    selectVoiceMode.addEventListener("change", () => {
-        modoVoz = selectVoiceMode.value;
-        localStorage.setItem(CONFIG.storageKeys.mode, modoVoz);
-
-        if (modoVoz === "neural") {
-            atualizarStatus("Modo de voz neural selecionado.");
-        } else if (modoVoz === "browser") {
-            atualizarStatus("Modo de voz do navegador selecionado.");
-        } else {
-            atualizarStatus("Modo automático selecionado.");
-        }
-    });
-
-    selectBrowserVoice.addEventListener("change", () => {
-        const nomeSelecionado = selectBrowserVoice.value;
-        nomeVozSalva = nomeSelecionado;
-        localStorage.setItem(CONFIG.storageKeys.browserVoice, nomeVozSalva);
-
-        const encontrada = vozesDisponiveis.find((voz) => voz.name === nomeSelecionado) || null;
-        vozSelecionada = encontrada;
-
-        atualizarStatus(
-            vozSelecionada
-                ? `Voz do navegador alterada para ${vozSelecionada.name}.`
-                : "Voz do navegador atualizada."
-        );
-    });
-
-    botao.addEventListener("pointerdown", iniciarArrasteBotao);
-    botao.addEventListener("pointermove", moverBotao);
-    botao.addEventListener("pointerup", finalizarArrasteBotao);
-    botao.addEventListener("pointercancel", finalizarArrasteBotao);
-
-    botao.addEventListener("click", (event) => {
-        if (moveuBotao) {
+        const start = (event) => {
             event.preventDefault();
-            event.stopPropagation();
+            resizing = true;
+
+            const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+            const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+            startX = clientX;
+            startY = clientY;
+            startWidth = widget.offsetWidth;
+            startHeight = widget.offsetHeight;
+
+            document.addEventListener("mousemove", move);
+            document.addEventListener("mouseup", end);
+            document.addEventListener("touchmove", move, { passive: false });
+            document.addEventListener("touchend", end);
+        };
+
+        handle.addEventListener("mousedown", start);
+        handle.addEventListener("touchstart", start, { passive: false });
+    }
+
+    function init() {
+        if (!document.body) {
+            const observer = new MutationObserver(() => {
+                if (document.body) {
+                    observer.disconnect();
+                    createWidget();
+                }
+            });
+
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true
+            });
             return;
         }
 
-        abrirOuFecharWidget();
-    });
-
-    resizeHandle.addEventListener("pointerdown", iniciarResizeWidget);
-    window.addEventListener("pointermove", moverResizeWidget);
-    window.addEventListener("pointerup", finalizarResizeWidget);
-    window.addEventListener("pointercancel", finalizarResizeWidget);
-
-    btnLerPagina.addEventListener("click", lerPagina);
-    btnPararLeitura.addEventListener("click", pararLeitura);
-    btnAumentarFonte.addEventListener("click", aumentarFonte);
-    btnDiminuirFonte.addEventListener("click", diminuirFonte);
-    btnContraste.addEventListener("click", alternarContraste);
-
-    document.addEventListener("click", (event) => {
-        const clicouNoBotao = botao.contains(event.target);
-        const clicouNoWidget = widget.contains(event.target);
-
-        if (!clicouNoBotao && !clicouNoWidget && widget.style.display === "flex") {
-            widget.style.display = "none";
-        }
-    });
-
-    window.addEventListener("resize", () => {
-        const rectBotao = botao.getBoundingClientRect();
-        definirPosicaoBotao(rectBotao.left, rectBotao.top);
-
-        if (widget.style.display === "flex") {
-            limitarPosicaoWidgetAoViewport();
-        }
-    });
-
-    if ("ResizeObserver" in window) {
-        const observer = new ResizeObserver(() => {
-            const rect = widget.getBoundingClientRect();
-            aplicarEscalaInterna(rect.width, rect.height);
-        });
-
-        observer.observe(widget);
+        createWidget();
     }
 
-    if ("speechSynthesis" in window) {
-        window.speechSynthesis.onvoiceschanged = carregarVozes;
-        carregarVozes();
-    }
-
-    widget.style.setProperty("--hexa-scale", "1");
-    widget.style.setProperty("--hexa-resize-handle-size", `${isTouchDevice() ? CONFIG.touchResizeHandleSize : CONFIG.resizeHandleSize}px`);
-
-    aplicarTamanhoSalvoWidget();
-    restaurarPosicaoBotao();
-
-    window.addEventListener("beforeunload", () => {
-        pararLeituraSilenciosamente();
-    });
-})();// JavaScript source code
+    init();
+})();
