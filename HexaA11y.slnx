@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/HexaA11y-Extension/">
+    <File Path="HexaA11y-Extension/content.css" />
+    <File Path="HexaA11y-Extension/content.js" />
+    <File Path="HexaA11y-Extension/manifest.json" />
+  </Folder>
   <Folder Name="/HexaA11y/">
     <File Path="index.html" />
   </Folder>
