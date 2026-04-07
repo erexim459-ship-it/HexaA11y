@@ -1,155 +1,372 @@
-#hexa-btn {
-    position: fixed;
-    left: 20px;
-    bottom: 20px;
-    width: 60px;
-    height: 60px;
-    background: #1e90ff;
-    color: white;
-    font-size: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    z-index: 999999;
+html,
+body {
+    overflow-x: hidden !important;
 }
 
-#hexa-panel {
-    position: fixed;
-    left: 20px;
-    bottom: 90px;
-    background: #111;
-    padding: 10px;
-    border-radius: 10px;
-    display: none;
-    flex-direction: column;
-    gap: 8px;
-    z-index: 999999;
+.hexa-high-contrast,
+.hexa-high-contrast body,
+.hexa-high-contrast p,
+.hexa-high-contrast div,
+.hexa-high-contrast span,
+.hexa-high-contrast a,
+.hexa-high-contrast h1,
+.hexa-high-contrast h2,
+.hexa-high-contrast h3,
+.hexa-high-contrast h4,
+.hexa-high-contrast h5,
+.hexa-high-contrast h6,
+.hexa-high-contrast li,
+.hexa-high-contrast label,
+.hexa-high-contrast button,
+.hexa-high-contrast section,
+.hexa-high-contrast article,
+.hexa-high-contrast main {
+    background: #000 !important;
+    color: #fff !important;
 }
 
-    #hexa-panel.open {
-        display: flex;
-    }
-
-    #hexa-panel button {
-        padding: 6px;
-        background: #2c8cff;
-        border: none;
-        color: white;
-        cursor: pointer;
-    }
-
-.hexa-contrast {
-    background: black !important;
-    color: white !important;
-}
-#hexaA11y-root {
+#hexaA11yRoot {
     position: fixed;
-    right: 20px;
-    bottom: 20px;
+    inset: 0;
+    pointer-events: none;
     z-index: 2147483647;
-    font-family: Arial, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
 }
 
-#hexaA11y-toggle {
-    width: 58px;
-    height: 58px;
+.hexa-floating-btn,
+.hexa-vlibras-btn,
+.hexa-widget,
+.hexa-close-btn,
+.hexa-resize-handle {
+    pointer-events: auto;
+}
+
+.hexa-floating-btn {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    width: 54px;
+    height: 54px;
     border: none;
     border-radius: 50%;
-    background: #0b57d0;
+    background: linear-gradient(135deg, #2575fc 0%, #1d4ed8 100%);
     color: #fff;
-    font-size: 28px;
+    font-size: 24px;
     cursor: pointer;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 14px 30px rgba(37, 117, 252, 0.35);
 }
 
-#hexaA11y-panel {
-    width: 280px;
-    margin-top: 12px;
-    background: #111827;
+.hexa-vlibras-btn {
+    position: fixed;
+    right: 18px;
+    top: 38%;
+    width: 50px;
+    height: 50px;
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4f9cff 0%, #2563eb 100%);
     color: #fff;
-    border-radius: 16px;
+    font-size: 22px;
+    cursor: pointer;
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.28);
+}
+
+.hexa-widget {
+    position: fixed;
+    left: 12px;
+    top: 214px;
+    width: 318px;
+    height: 592px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 24px;
     overflow: hidden;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    background: linear-gradient(180deg, #17253b 0%, #0e1727 100%);
+    border: 1px solid rgba(117, 154, 214, 0.18);
+    box-shadow: 0 20px 48px rgba(8, 15, 28, 0.42);
 }
 
 .hexa-hidden {
-    display: none;
+    display: none !important;
 }
 
 .hexa-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 14px 16px;
-    background: #1f2937;
-    font-weight: bold;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 18px 14px;
+    background: linear-gradient(180deg, rgba(34, 58, 92, 0.92) 0%, rgba(23, 37, 59, 0.88) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-#hexaA11y-close {
-    background: transparent;
-    border: none;
-    color: #fff;
-    font-size: 22px;
-    cursor: pointer;
+.hexa-avatar-wrap {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
 }
 
-.hexa-body {
+.hexa-avatar-glow {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(88, 180, 255, 0.32) 0%, rgba(37, 99, 235, 0.08) 66%, transparent 78%);
+    animation: hexaPulse 2.6s infinite ease-in-out;
+}
+
+.hexa-avatar {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #55b8ff 0%, #2f6df5 100%);
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 14px;
+    align-items: center;
+    justify-content: center;
 }
 
-.hexa-btn {
-    border: none;
-    border-radius: 10px;
-    padding: 12px;
-    cursor: pointer;
-    background: #2563eb;
+.hexa-face {
+    position: relative;
+    width: 56%;
+    height: 56%;
+}
+
+.hexa-eye {
+    position: absolute;
+    top: 24%;
+    width: 16%;
+    height: 16%;
+    background: #fff;
+    border-radius: 50%;
+}
+
+.hexa-eye.left {
+    left: 14%;
+}
+
+.hexa-eye.right {
+    right: 14%;
+}
+
+.hexa-mouth {
+    position: absolute;
+    left: 50%;
+    bottom: 8%;
+    transform: translateX(-50%);
+    width: 42%;
+    height: 18%;
+    border-bottom: 3px solid #fff;
+    border-radius: 0 0 20px 20px;
+}
+
+.hexa-avatar.speaking .hexa-mouth {
+    animation: hexaTalk 0.22s infinite alternate;
+}
+
+.hexa-title {
+    flex: 1;
+    min-width: 0;
+    padding-top: 3px;
+}
+
+.hexa-title h3 {
+    margin: 0;
     color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.hexa-title p {
+    margin: 7px 0 0 0;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 13px;
+    line-height: 1.45;
     font-weight: 600;
 }
 
-.hexa-label {
+.hexa-close-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0;
+}
+
+.hexa-content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    min-height: 0;
+    padding: 0;
+}
+
+.hexa-side-text {
+    padding: 16px;
+    display: flex;
+    align-items: stretch;
+}
+
+.hexa-side-text p {
+    margin: 0;
+    width: 100%;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #eef5ff;
+    padding: 16px 14px;
     font-size: 13px;
-    color: #d1d5db;
+    line-height: 1.55;
+}
+
+.hexa-actions-panel {
+    padding: 14px 14px 18px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+}
+
+.hexa-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.hexa-label {
+    color: rgba(255, 255, 255, 0.84);
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .hexa-select {
     width: 100%;
-    border: 1px solid #374151;
-    border-radius: 10px;
-    padding: 10px;
-    background: #0f172a;
+    min-height: 46px;
+    border-radius: 14px;
+    border: 1px solid rgba(87, 131, 199, 0.45);
+    background: #1a2a43;
     color: #fff;
-}
-
-.hexa-status {
-    margin-top: 6px;
-    padding: 10px;
-    border-radius: 10px;
-    background: #1f2937;
-    color: #cbd5e1;
+    padding: 0 12px;
+    outline: none;
     font-size: 13px;
 }
 
-.hexa-contrast,
-.hexa-contrast body,
-.hexa-contrast p,
-.hexa-contrast div,
-.hexa-contrast span,
-.hexa-contrast a,
-.hexa-contrast h1,
-.hexa-contrast h2,
-.hexa-contrast h3,
-.hexa-contrast h4,
-.hexa-contrast h5,
-.hexa-contrast h6,
-.hexa-contrast li,
-.hexa-contrast label,
-.hexa-contrast button {
-    background: #000 !important;
-    color: #fff !important;
+.hexa-select option {
+    background: #122036;
+    color: #fff;
+}
+
+.hexa-action-btn {
+    width: 100%;
+    min-height: 46px;
+    border: none;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    padding: 0 16px;
+    cursor: pointer;
+    transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.hexa-action-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(76, 143, 255, 0.18);
+}
+
+.hexa-resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 34px;
+    height: 34px;
+    background: transparent;
+    border: none;
+    cursor: nwse-resize;
+}
+
+.hexa-resize-handle::before {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    width: 14px;
+    height: 14px;
+    border-right: 2px solid rgba(255, 255, 255, 0.42);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.42);
+    border-radius: 0 0 8px 0;
+}
+
+[vw] {
+    position: fixed !important;
+    right: 22px !important;
+    bottom: 84px !important;
+    z-index: 2147483646 !important;
+}
+
+[vw-access-button] {
+    border-radius: 18px !important;
+    box-shadow: 0 16px 30px rgba(37, 99, 235, 0.24) !important;
+}
+
+.vw-plugin-wrapper,
+.vw-window {
+    border-radius: 22px !important;
+    overflow: hidden !important;
+}
+
+@keyframes hexaPulse {
+    0% {
+        transform: scale(0.95);
+        opacity: 0.68;
+    }
+    50% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0.95);
+        opacity: 0.68;
+    }
+}
+
+@keyframes hexaTalk {
+    from {
+        width: 42%;
+        height: 18%;
+    }
+    to {
+        width: 30%;
+        height: 28%;
+    }
+}
+
+@media (max-width: 768px) {
+    .hexa-widget {
+        left: 8px;
+        right: 8px;
+        top: auto;
+        bottom: 84px;
+        width: auto;
+        height: min(78vh, 620px);
+    }
+
+    .hexa-content {
+        grid-template-columns: 1fr;
+    }
+
+    .hexa-actions-panel {
+        padding: 0 14px 16px 14px;
+    }
+
+    .hexa-side-text {
+        padding: 14px;
+    }
+
+    .hexa-vlibras-btn {
+        top: auto;
+        bottom: 150px;
+    }
 }
