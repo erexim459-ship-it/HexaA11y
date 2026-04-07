@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/HexaA11y/">
+    <File Path="index.html" />
+  </Folder>
+  <Folder Name="/HexaA11y/assets/" />
+  <Folder Name="/HexaA11y/assets/css/">
+    <File Path="assets/css/widget.css" />
+  </Folder>
+  <Folder Name="/HexaA11y/assets/js/">
+    <File Path="assets/js/widget.js" />
+  </Folder>
+</Solution>
